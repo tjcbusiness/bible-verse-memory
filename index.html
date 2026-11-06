@@ -159,6 +159,7 @@
       <option value="tts">Phone voice</option>
     </select>
     <p class="note" style="margin-top:8px">The reference is always read by the phone voice. If the ESV recording can't load, the phone voice reads the verses instead.</p>
+    <p class="note" style="margin-top:8px">For a nicer phone voice on iPhone: Settings → Accessibility → Spoken Content → Voices → English, download a voice marked “Premium” or “Enhanced,” then pick it below.</p>
     <label class="f" for="rate">Phone voice speed</label>
     <select id="rate">
       <option value="0.75">Slow</option>
@@ -291,40 +292,50 @@ function say(text, onDone){
 }
 // ---------- ESV recordings ----------
 const audioEl = document.getElementById('esvAudio');
-const audioCache = {};   // ref -> blob URL (kept for this visit only)
 let audioWarned = false;
-const SILENT = 'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
-function unlockAudio(){ try{ audioEl.src = SILENT; const p = audioEl.play(); if (p) p.catch(()=>{}); }catch(e){} }
-function getAudio(v){
-  if (audioCache[v.ref]) return audioCache[v.ref];
-  const q = `${v.book} ${v.chap}:${v.from}${v.to>v.from?'-'+v.to:''}`;
-  const pr = fetch('https://api.esv.org/v3/passage/audio/?q='+encodeURIComponent(q), { headers:{ Authorization:'Token '+apiKey } })
-    .then(r=>{ if(!r.ok) throw new Error('http'); return r.blob(); })
-    .then(b=>{ if (!b.size) throw new Error('empty'); return URL.createObjectURL(b); });
-  audioCache[v.ref] = pr;
-  pr.catch(()=>{ delete audioCache[v.ref]; });
-  return pr;
+let unlocking = false;
+function unlockAudio(v){
+  // iPhone only lets audio play later if play() is first called during a tap.
+  // Start the first recording muted inside the tap, then pause it until it's needed.
+  try{
+    preloadRecording(v); audioEl.muted = true; unlocking = true;
+    const p = audioEl.play();
+    const done = ()=>{ if (unlocking){ unlocking = false; audioEl.pause(); try{ audioEl.currentTime = 0; }catch(e){} } audioEl.muted = false; };
+    if (p) p.then(done, done); else done();
+  }catch(e){ unlocking = false; audioEl.muted = false; }
 }
-function playRecording(url, onDone, onFail){
+// Crossway's recordings live at audio.esv.org/hw/<start>-<end>.mp3, where each id is
+// book (2 digits) + chapter (3) + verse (3), e.g. Romans 8:38 = 45008038.
+// Playing that address directly in an <audio> element works on phones, unlike downloading it.
+function verseId(v, n){
+  const b = BOOKS.findIndex(x=>x[0]===v.book) + 1;
+  return String(b).padStart(2,'0') + String(v.chap).padStart(3,'0') + String(n).padStart(3,'0');
+}
+function recordingUrl(v){ return `https://audio.esv.org/hw/${verseId(v, v.from)}-${verseId(v, v.to)}.mp3`; }
+let loadedUrl = null;
+function preloadRecording(v){
+  const url = recordingUrl(v);
+  if (loadedUrl !== url){ audioEl.onended = audioEl.onerror = null; audioEl.src = url; audioEl.load(); loadedUrl = url; }
+}
+function playRecording(v, onDone, onFail){
+  preloadRecording(v);
+  unlocking = false; audioEl.muted = false;
+  let failed = false;
+  const fail = ()=>{ if (failed || !playing) return; failed = true; loadedUrl = null;
+    if (!audioWarned){ audioWarned = true; toast("ESV recording didn't load, so the phone voice is reading"); }
+    onFail(); };
   audioEl.onended = ()=>{ if (playing) onDone(); };
-  audioEl.onerror = ()=>{ if (playing) onFail(); };
-  audioEl.src = url;
-  const p = audioEl.play(); if (p) p.catch(()=>{ if (playing) onFail(); });
+  audioEl.onerror = fail;
+  try{ audioEl.currentTime = 0; }catch(e){}
+  const p = audioEl.play(); if (p) p.catch(fail);
 }
 function speakVerse(i, onDone){
   nowIdx = i; render();
   const v = verses[i];
   if (reader === 'esv'){
-    const rec = getAudio(v);
+    preloadRecording(v);   // starts loading while the reference is spoken
     say(spokenRef(v), ()=>{
-      timer = setTimeout(()=>{
-        rec.then(url=>{ if (playing) playRecording(url, onDone, ()=>ttsVerse(v, onDone)); })
-           .catch(()=>{
-             if (!playing) return;
-             if (!audioWarned){ audioWarned = true; toast("ESV recording didn't load, so the phone voice is reading"); }
-             ttsVerse(v, onDone);
-           });
-      }, 400);
+      timer = setTimeout(()=>{ if (playing) playRecording(v, onDone, ()=>ttsVerse(v, onDone)); }, 300);
     });
     return;
   }
@@ -361,7 +372,7 @@ function start(){
   playing = true;
   nowIdx = mode==='one' ? selected : 0;
   if (synth.speaking || synth.pending) synth.cancel();
-  if (reader === 'esv') unlockAudio();
+  if (reader === 'esv') unlockAudio(verses[nowIdx]);
   setPlayUI();
   loop();   // first words are spoken inside this tap
   // Chrome on Android can stall the voice silently; nudge it.

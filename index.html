@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Verse Memory</title>
+<meta name="theme-color" content="#1f1d1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Verses">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#faf8f4; --card:#ffffff; --ink:#1f1d1a; --muted:#7a746b; --line:#e8e3da;
+    --accent:#8a5a2b; --accent-ink:#fff; --soft:#f3eee6; --danger:#b3412f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#121110; --card:#1c1a18; --ink:#efeae2; --muted:#9c958b; --line:#2e2b27;
+      --accent:#d39a5c; --accent-ink:#1a1206; --soft:#25221e; --danger:#e07a66; }
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:Inter,system-ui,-apple-system,sans-serif; font-size:16px}
+  body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  .wrap{max-width:560px; margin:0 auto; padding:0 18px 140px}
+  header{display:flex; align-items:center; justify-content:space-between; padding:18px 0 10px}
+  h1{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:28px; margin:0}
+  .iconbtn{background:none; border:0; color:var(--ink); padding:8px; border-radius:10px; cursor:pointer}
+  .iconbtn svg{width:24px; height:24px; display:block}
+  .seg{display:flex; background:var(--soft); border-radius:12px; padding:4px; margin:6px 0 16px}
+  .seg button{flex:1; border:0; background:none; padding:10px 6px; border-radius:9px; font:500 14px Inter,sans-serif; color:var(--muted); cursor:pointer}
+  .seg button.on{background:var(--card); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .hint{color:var(--muted); font-size:13px; margin:-8px 0 12px}
+  .verse{background:var(--card); border:1.5px solid var(--line); border-radius:14px; padding:14px 14px 14px 16px; margin-bottom:10px; display:flex; gap:10px; cursor:pointer}
+  .verse.sel{border-color:var(--accent)}
+  .verse.playing{background:var(--soft)}
+  .verse .body{flex:1; min-width:0}
+  .verse .ref{font-weight:600; font-size:15px; margin-bottom:4px; display:flex; align-items:center; gap:8px}
+  .verse .ref .dot{width:8px; height:8px; border-radius:50%; background:var(--accent); display:none}
+  .verse.playing .ref .dot{display:inline-block; animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  .verse .txt{font-family:"Source Serif 4",Georgia,serif; font-size:17px; line-height:1.5; color:var(--ink)}
+  .verse .del{align-self:flex-start; color:var(--muted)}
+  .empty{text-align:center; color:var(--muted); padding:40px 10px; font-family:"Source Serif 4",Georgia,serif; font-size:18px; line-height:1.5}
+  .addbtn{width:100%; border:1.5px dashed var(--line); background:none; color:var(--accent); font:600 15px Inter,sans-serif; padding:14px; border-radius:14px; cursor:pointer; margin-top:4px}
+  .player{position:fixed; left:0; right:0; bottom:0; background:linear-gradient(transparent, var(--bg) 30%); padding:26px 18px calc(18px + env(safe-area-inset-bottom))}
+  .player .in{max-width:560px; margin:0 auto}
+  .play{width:100%; border:0; background:var(--accent); color:var(--accent-ink); font:600 17px Inter,sans-serif; padding:17px; border-radius:16px; display:flex; align-items:center; justify-content:center; gap:10px; cursor:pointer}
+  .play svg{width:22px; height:22px}
+  .play:disabled{opacity:.4}
+  .foot{color:var(--muted); font-size:11.5px; line-height:1.45; margin-top:28px}
+  .foot a{color:var(--muted)}
+  /* sheets */
+  .sheet{position:fixed; inset:0; background:var(--bg); z-index:10; display:none; flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  .sheet.open{display:flex}
+  .sheet .top{display:flex; align-items:center; gap:6px; padding:12px 12px 8px; max-width:560px; width:100%; margin:0 auto}
+  .sheet .top h2{flex:1; margin:0; font:600 18px Inter,sans-serif; text-align:center; padding-right:40px}
+  .sheet .scroll{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch}
+  .sheet .scroll > div{max-width:560px; margin:0 auto; padding:0 18px 30px}
+  .testament{font:600 12px Inter,sans-serif; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:18px 0 6px}
+  .book{display:flex; justify-content:space-between; align-items:center; width:100%; text-align:left; background:none; border:0; border-bottom:1px solid var(--line); padding:14px 2px; font:400 17px "Source Serif 4",Georgia,serif; color:var(--ink); cursor:pointer}
+  .book span{color:var(--muted); font:400 13px Inter,sans-serif}
+  label.f{display:block; font:500 13px Inter,sans-serif; color:var(--muted); margin:14px 0 6px}
+  select, input[type=text], input[type=password]{width:100%; font:400 17px Inter,sans-serif; padding:13px 12px; border:1.5px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); -webkit-appearance:none; appearance:none}
+  select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%237a746b' stroke-width='2'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; padding-right:36px}
+  .row{display:flex; gap:10px; align-items:flex-end}
+  .row > div{flex:1}
+  .to{padding-bottom:14px; color:var(--muted)}
+  .preview{background:var(--card); border:1.5px solid var(--line); border-radius:14px; padding:16px; margin-top:18px; min-height:80px}
+  .preview .ref{font-weight:600; margin-bottom:6px}
+  .preview .txt{font-family:"Source Serif 4",Georgia,serif; font-size:18px; line-height:1.55}
+  .preview .msg{color:var(--muted); font-size:14px}
+  .preview .err{color:var(--danger); font-size:14px; line-height:1.4}
+  .primary{width:100%; border:0; background:var(--accent); color:var(--accent-ink); font:600 16px Inter,sans-serif; padding:15px; border-radius:14px; margin-top:16px; cursor:pointer}
+  .primary:disabled{opacity:.4}
+  .note{color:var(--muted); font-size:13.5px; line-height:1.5}
+  .note a{color:var(--accent)}
+  .esvlink{display:inline-block; color:var(--accent); font:600 15px Inter,sans-serif; text-decoration:none; padding:6px 0 2px}
+  textarea{width:100%; font:400 17px/1.5 "Source Serif 4",Georgia,serif; padding:12px; border:1.5px solid var(--line); border-radius:12px; background:var(--bg); color:var(--ink); resize:vertical}
+  .sync{color:var(--muted); font-size:12px; margin:-4px 0 10px; min-height:14px}
+  .toast{position:fixed; left:50%; bottom:110px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:20px; font-size:14px; z-index:20; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90%; text-align:center}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>My Verses</h1>
+    <button class="iconbtn" id="openSettings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </header>
+
+  <div class="seg" role="tablist">
+    <button id="modeOne" class="on">Repeat one verse</button>
+    <button id="modeAll">Go through all</button>
+  </div>
+  <p class="hint" id="modeHint"></p>
+
+  <div id="list"></div>
+  <button class="addbtn" id="openAdd">+ Add a verse</button>
+
+  <p class="foot">Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. <a href="https://www.esv.org" target="_blank" rel="noopener">www.esv.org</a></p>
+</div>
+
+<div class="player"><div class="in">
+  <button class="play" id="play">
+    <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    <span id="playLabel">Play</span>
+  </button>
+</div></div>
+
+<!-- Add verse: book list -->
+<div class="sheet" id="bookSheet">
+  <div class="top">
+    <button class="iconbtn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <h2>Books</h2>
+  </div>
+  <div class="scroll"><div id="books"></div></div>
+</div>
+
+<!-- Add verse: chapter / verse picker -->
+<div class="sheet" id="pickSheet">
+  <div class="top">
+    <button class="iconbtn" id="backToBooks" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <h2 id="pickTitle">Book</h2>
+  </div>
+  <div class="scroll"><div>
+    <label class="f" for="selChap">Chapter</label>
+    <select id="selChap"></select>
+    <div class="row">
+      <div><label class="f" for="selFrom">Verse</label><select id="selFrom"></select></div>
+      <div class="to">to</div>
+      <div><label class="f" for="selTo">Through</label><select id="selTo"></select></div>
+    </div>
+    <div class="preview" id="preview"></div>
+    <button class="primary" id="addIt" disabled>Add to my verses</button>
+  </div></div>
+</div>
+
+<!-- Settings -->
+<div class="sheet" id="setSheet">
+  <div class="top">
+    <button class="iconbtn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <h2>Settings</h2>
+  </div>
+  <div class="scroll"><div>
+    <label class="f" for="apiKey">ESV API key</label>
+    <input type="password" id="apiKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your key here">
+    <button class="primary" id="saveKey">Save key</button>
+    <p class="note" style="margin-top:16px">Your key and your verse list are saved only on this phone. Get a free key at <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>.</p>
+    <label class="f" for="reader">Who reads the verses</label>
+    <select id="reader">
+      <option value="esv">ESV audio recording</option>
+      <option value="tts">Phone voice</option>
+    </select>
+    <p class="note" style="margin-top:8px">The reference is always read by the phone voice. If the ESV recording can't load, the phone voice reads the verses instead.</p>
+    <label class="f" for="rate">Phone voice speed</label>
+    <select id="rate">
+      <option value="0.75">Slow</option>
+      <option value="0.9" selected>Normal</option>
+      <option value="1.05">Faster</option>
+    </select>
+    <label class="f" for="voice">Voice</label>
+    <select id="voice"><option value="">Phone default</option></select>
+    <p class="note" style="margin-top:16px">Tip: keep this app open while it plays. Phones usually stop the reading voice when the screen locks, so the app tries to keep your screen on.</p>
+  </div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<audio id="esvAudio" preload="auto" playsinline></audio>
+
+<script>
+const BOOKS = [["Genesis",[31,25,24,26,32,22,24,22,29,32,32,20,18,24,21,16,27,33,38,18,34,24,20,67,34,35,46,22,35,43,55,32,20,31,29,43,36,30,23,23,57,38,34,34,28,34,31,22,33,26]],["Exodus",[22,25,22,31,23,30,25,32,35,29,10,51,22,31,27,36,16,27,25,26,36,31,33,18,40,37,21,43,46,38,18,35,23,35,35,38,29,31,43,38]],["Leviticus",[17,16,17,35,19,30,38,36,24,20,47,8,59,57,33,34,16,30,37,27,24,33,44,23,55,46,34]],["Numbers",[54,34,51,49,31,27,89,26,23,36,35,16,33,45,41,50,13,32,22,29,35,41,30,25,18,65,23,31,40,16,54,42,56,29,34,13]],["Deuteronomy",[46,37,29,49,33,25,26,20,29,22,32,32,18,29,23,22,20,22,21,20,23,30,25,22,19,19,26,68,29,20,30,52,29,12]],["Joshua",[18,24,17,24,15,27,26,35,27,43,23,24,33,15,63,10,18,28,51,9,45,34,16,33]],["Judges",[36,23,31,24,31,40,25,35,57,18,40,15,25,20,20,31,13,31,30,48,25]],["Ruth",[22,23,18,22]],["1 Samuel",[28,36,21,22,12,21,17,22,27,27,15,25,23,52,35,23,58,30,24,42,15,23,29,22,44,25,12,25,11,31,13]],["2 Samuel",[27,32,39,12,25,23,29,18,13,19,27,31,39,33,37,23,29,33,43,26,22,51,39,25]],["1 Kings",[53,46,28,34,18,38,51,66,28,29,43,33,34,31,34,34,24,46,21,43,29,53]],["2 Kings",[18,25,27,44,27,33,20,29,37,36,21,21,25,29,38,20,41,37,37,21,26,20,37,20,30]],["1 Chronicles",[54,55,24,43,26,81,40,40,44,14,47,40,14,17,29,43,27,17,19,8,30,19,32,31,31,32,34,21,30]],["2 Chronicles",[17,18,17,22,14,42,22,18,31,19,23,16,22,15,19,14,19,34,11,37,20,12,21,27,28,23,9,27,36,27,21,33,25,33,27,23]],["Ezra",[11,70,13,24,17,22,28,36,15,44]],["Nehemiah",[11,20,32,23,19,19,73,18,38,39,36,47,31]],["Esther",[22,23,15,17,14,14,10,17,32,3]],["Job",[22,13,26,21,27,30,21,22,35,22,20,25,28,22,35,22,16,21,29,29,34,30,17,25,6,14,23,28,25,31,40,22,33,37,16,33,24,41,30,24,34,17]],["Psalms",[6,12,8,8,12,10,17,9,20,18,7,8,6,7,5,11,15,50,14,9,13,31,6,10,22,12,14,9,11,12,24,11,22,22,28,12,40,22,13,17,13,11,5,26,17,11,9,14,20,23,19,9,6,7,23,13,11,11,17,12,8,12,11,10,13,20,7,35,36,5,24,20,28,23,10,12,20,72,13,19,16,8,18,12,13,17,7,18,52,17,16,15,5,23,11,13,12,9,9,5,8,28,22,35,45,48,43,13,31,7,10,10,9,8,18,19,2,29,176,7,8,9,4,8,5,6,5,6,8,8,3,18,3,3,21,26,9,8,24,13,10,7,12,15,21,10,20,14,9,6]],["Proverbs",[33,22,35,27,23,35,27,36,18,32,31,28,25,35,33,33,28,24,29,30,31,29,35,34,28,28,27,28,27,33,31]],["Ecclesiastes",[18,26,22,16,20,12,29,17,18,20,10,14]],["Song of Solomon",[17,17,11,16,16,13,13,14]],["Isaiah",[31,22,26,6,30,13,25,22,21,34,16,6,22,32,9,14,14,7,25,6,17,25,18,23,12,21,13,29,24,33,9,20,24,17,10,22,38,22,8,31,29,25,28,28,25,13,15,22,26,11,23,15,12,17,13,12,21,14,21,22,11,12,19,12,25,24]],["Jeremiah",[19,37,25,31,31,30,34,22,26,25,23,17,27,22,21,21,27,23,15,18,14,30,40,10,38,24,22,17,32,24,40,44,26,22,19,32,21,28,18,16,18,22,13,30,5,28,7,47,39,46,64,34]],["Lamentations",[22,22,66,22,22]],["Ezekiel",[28,10,27,17,17,14,27,18,11,22,25,28,23,23,8,63,24,32,14,49,32,31,49,27,17,21,36,26,21,26,18,32,33,31,15,38,28,23,29,49,26,20,27,31,25,24,23,35]],["Daniel",[21,49,30,37,31,28,28,27,27,21,45,13]],["Hosea",[11,23,5,19,15,11,16,14,17,15,12,14,16,9]],["Joel",[20,32,21]],["Amos",[15,16,15,13,27,14,17,14,15]],["Obadiah",[21]],["Jonah",[17,10,10,11]],["Micah",[16,13,12,13,15,16,20]],["Nahum",[15,13,19]],["Habakkuk",[17,20,19]],["Zephaniah",[18,15,20]],["Haggai",[15,23]],["Zechariah",[21,13,10,14,11,15,14,23,17,12,17,14,9,21]],["Malachi",[14,17,18,6]],["Matthew",[25,23,17,25,48,34,29,34,38,42,30,50,58,36,39,28,27,35,30,34,46,46,39,51,46,75,66,20]],["Mark",[45,28,35,41,43,56,37,38,50,52,33,44,37,72,47,20]],["Luke",[80,52,38,44,39,49,50,56,62,42,54,59,35,35,32,31,37,43,48,47,38,71,56,53]],["John",[51,25,36,54,47,71,53,59,41,42,57,50,38,31,27,33,26,40,42,31,25]],["Acts",[26,47,26,37,42,15,60,40,43,48,30,25,52,28,41,40,34,28,41,38,40,30,35,27,27,32,44,31]],["Romans",[32,29,31,25,21,23,25,39,33,21,36,21,14,23,33,27]],["1 Corinthians",[31,16,23,21,13,20,40,13,27,33,34,31,13,40,58,24]],["2 Corinthians",[24,17,18,18,21,18,16,24,15,18,33,21,14]],["Galatians",[24,21,29,31,26,18]],["Ephesians",[23,22,21,32,33,24]],["Philippians",[30,30,21,23]],["Colossians",[29,23,25,18]],["1 Thessalonians",[10,20,13,18,28]],["2 Thessalonians",[12,17,18]],["1 Timothy",[20,15,16,16,25,21]],["2 Timothy",[18,26,17,22]],["Titus",[16,15,15]],["Philemon",[25]],["Hebrews",[14,18,19,16,14,20,28,13,28,39,40,29,25]],["James",[27,26,18,17,20]],["1 Peter",[25,25,22,19,14]],["2 Peter",[21,22,18]],["1 John",[10,29,24,21,21]],["2 John",[13]],["3 John",[15]],["Jude",[25]],["Revelation",[20,29,22,11,14,17,17,13,21,11,19,18,18,20,8,21,18,24,21,15,27,21]]]; // [name, [verses per chapter]]
+const NT_START = 39; // index of Matthew
+
+// ---------- storage ----------
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('vm_'+k); return v===null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('vm_'+k, JSON.stringify(v)); }catch(e){} }
+};
+let verses = store.get('verses', []);     // {ref, book, chap, from, to, text}
+let mode = store.get('mode', 'one');      // 'one' | 'all'
+let selected = store.get('selected', 0);
+let apiKey = store.get('key', '');
+let rate = store.get('rate', '0.9');
+let voiceName = store.get('voice', '');
+let reader = store.get('reader', 'esv');
+
+const $ = id => document.getElementById(id);
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600); }
+function esc(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// ---------- references ----------
+function refText(v){ return `${v.book==='Psalms'?'Psalm':v.book} ${v.chap}:${v.from}${v.to>v.from ? '-'+v.to : ''}`; }
+const ORD = {'1':'First','2':'Second','3':'Third'};
+function spokenRef(v){
+  let b = v.book.replace(/^([123]) /, (m,n)=>ORD[n]+' ');
+  if (b === 'Psalms') b = 'Psalm';
+  if (BOOKS.find(x=>x[0]===v.book)[1].length === 1) // one-chapter books: Jude 24-25
+    return v.to>v.from ? `${b}, verses ${v.from} through ${v.to}` : `${b}, verse ${v.from}`;
+  return v.to>v.from ? `${b} ${v.chap}, verses ${v.from} through ${v.to}` : `${b} ${v.chap}, verse ${v.from}`;
+}
+
+// ---------- list ----------
+function render(){
+  $('modeOne').classList.toggle('on', mode==='one');
+  $('modeAll').classList.toggle('on', mode==='all');
+  $('modeHint').textContent = !verses.length ? '' :
+    mode==='one' ? 'Tap a verse to choose it. It will repeat until you stop.' : 'Reads every verse in order, then starts over.';
+  if (selected >= verses.length) selected = 0;
+  const L = $('list');
+  if (!verses.length){
+    L.innerHTML = `<div class="empty">No verses yet.<br>Add the first one you want to memorize.</div>`;
+  } else {
+    L.innerHTML = verses.map((v,i)=>`
+      <div class="verse ${mode==='one'&&i===selected?'sel':''} ${playing&&i===nowIdx?'playing':''}" data-i="${i}">
+        <div class="body"><div class="ref"><span class="dot"></span>${esc(v.ref)}</div><div class="txt">${esc(v.text)}</div></div>
+        <button class="iconbtn del" data-del="${i}" aria-label="Remove ${esc(v.ref)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>`).join('');
+  }
+  $('play').disabled = !verses.length;
+}
+$('list').addEventListener('click', e=>{
+  const d = e.target.closest('[data-del]');
+  if (d){
+    const i = +d.dataset.del;
+    if (pendingDelete === i){
+      stop(); verses.splice(i,1); store.set('verses', verses);
+      if (selected >= i && selected>0) selected--; store.set('selected', selected);
+      pendingDelete = null; render(); toast('Removed');
+    } else { pendingDelete = i; toast('Tap × again to remove'); setTimeout(()=>{ if(pendingDelete===i) pendingDelete=null; }, 3000); }
+    return;
+  }
+  const c = e.target.closest('.verse');
+  if (c){
+    const i = +c.dataset.i;
+    if (mode !== 'one') { mode='one'; store.set('mode',mode); }
+    const wasPlaying = playing;
+    selected = i; store.set('selected', selected);
+    if (wasPlaying){ stop(); start(); } else render();
+  }
+});
+let pendingDelete = null;
+$('modeOne').onclick = ()=>{ setMode('one'); };
+$('modeAll').onclick = ()=>{ setMode('all'); };
+function setMode(m){ if (mode===m) return; const w=playing; stop(); mode=m; store.set('mode',m); if(w) start(); else render(); }
+
+// ---------- speech ----------
+const synth = window.speechSynthesis;
+let playing = false, nowIdx = -1, timer = null, wakeLock = null, keepAlive = null;
+let voices = [];
+function loadVoices(){
+  if (!synth) return;
+  voices = synth.getVoices().filter(v=>/^en/i.test(v.lang));
+  const sel = $('voice');
+  sel.innerHTML = '<option value="">Phone default</option>' + voices.map(v=>`<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('');
+  sel.value = voiceName;
+}
+if (synth){ loadVoices(); synth.onvoiceschanged = loadVoices; }
+
+function chunks(text){
+  // Split long text into sentence-sized pieces; some phones cut off long utterances.
+  const parts = text.match(/[^.!?;:]+[.!?;:]+["'”’)]*\s*|[^.!?;:]+$/g) || [text];
+  const out = []; let cur = '';
+  for (const p of parts){ if ((cur+p).length > 180 && cur){ out.push(cur.trim()); cur=p; } else cur += p; }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+function say(text, onDone){
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = parseFloat(rate);
+  const v = voices.find(x=>x.name===voiceName);
+  if (v){ u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
+  u.onend = ()=>{ if (playing) onDone(); };
+  u.onerror = (e)=>{ if (playing && e.error!=='interrupted' && e.error!=='canceled') onDone(); };
+  synth.speak(u);
+}
+// ---------- ESV recordings ----------
+const audioEl = document.getElementById('esvAudio');
+const audioCache = {};   // ref -> blob URL (kept for this visit only)
+let audioWarned = false;
+const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+function unlockAudio(){ try{ audioEl.src = SILENT; const p = audioEl.play(); if (p) p.catch(()=>{}); }catch(e){} }
+function getAudio(v){
+  if (audioCache[v.ref]) return audioCache[v.ref];
+  const q = `${v.book} ${v.chap}:${v.from}${v.to>v.from?'-'+v.to:''}`;
+  const pr = fetch('https://api.esv.org/v3/passage/audio/?q='+encodeURIComponent(q), { headers:{ Authorization:'Token '+apiKey } })
+    .then(r=>{ if(!r.ok) throw new Error('http'); return r.blob(); })
+    .then(b=>{ if (!b.size) throw new Error('empty'); return URL.createObjectURL(b); });
+  audioCache[v.ref] = pr;
+  pr.catch(()=>{ delete audioCache[v.ref]; });
+  return pr;
+}
+function playRecording(url, onDone, onFail){
+  audioEl.onended = ()=>{ if (playing) onDone(); };
+  audioEl.onerror = ()=>{ if (playing) onFail(); };
+  audioEl.src = url;
+  const p = audioEl.play(); if (p) p.catch(()=>{ if (playing) onFail(); });
+}
+function speakVerse(i, onDone){
+  nowIdx = i; render();
+  const v = verses[i];
+  if (reader === 'esv'){
+    const rec = getAudio(v);
+    say(spokenRef(v), ()=>{
+      timer = setTimeout(()=>{
+        rec.then(url=>{ if (playing) playRecording(url, onDone, ()=>ttsVerse(v, onDone)); })
+           .catch(()=>{
+             if (!playing) return;
+             if (!audioWarned){ audioWarned = true; toast("ESV recording didn't load, so the phone voice is reading"); }
+             ttsVerse(v, onDone);
+           });
+      }, 400);
+    });
+    return;
+  }
+  const queue = [spokenRef(v), ...chunks(v.text)];
+  let k = 0;
+  const next = ()=>{
+    if (!playing) return;
+    if (k >= queue.length){ onDone(); return; }
+    const t = queue[k++];
+    if (k === 2) timer = setTimeout(()=>say(t, next), 500); // short pause after the reference
+    else say(t, next);
+  };
+  next();
+}
+function ttsVerse(v, onDone){
+  const queue = chunks(v.text); let k = 0;
+  const next = ()=>{ if (!playing) return; if (k >= queue.length){ onDone(); return; } say(queue[k++], next); };
+  next();
+}
+function loop(){
+  if (!playing) return;
+  const i = mode==='one' ? selected : nowIdx;
+  speakVerse(i, ()=>{
+    if (!playing) return;
+    if (mode==='all') nowIdx = (nowIdx+1) % verses.length;
+    timer = setTimeout(loop, 2000); // pause between readings
+  });
+}
+async function start(){
+  if (!synth){ toast("This browser can't read aloud."); return; }
+  if (!verses.length) return;
+  playing = true;
+  nowIdx = mode==='one' ? selected : 0;
+  synth.cancel();
+  if (reader === 'esv') unlockAudio();
+  setPlayUI();
+  // Chrome on Android can stall the voice silently; nudge it.
+  keepAlive = setInterval(()=>{ if (synth.speaking && !synth.paused){ synth.pause(); synth.resume(); } }, 10000);
+  try{ if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+  loop();
+}
+function stop(){
+  playing = false; nowIdx = -1;
+  clearTimeout(timer); clearInterval(keepAlive);
+  if (synth) synth.cancel();
+  try{ audioEl.pause(); audioEl.onended = audioEl.onerror = null; }catch(e){}
+  try{ wakeLock && wakeLock.release(); }catch(e){} wakeLock = null;
+  setPlayUI(); render();
+}
+function setPlayUI(){
+  $('playLabel').textContent = playing ? 'Stop' : 'Play';
+  $('playIcon').innerHTML = playing ? '<rect x="6" y="6" width="12" height="12" rx="1.5"/>' : '<path d="M8 5v14l11-7z"/>';
+}
+$('play').onclick = ()=>{ playing ? stop() : start(); };
+document.addEventListener('visibilitychange', async ()=>{
+  if (document.visibilityState==='visible' && playing && !wakeLock){
+    try{ wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+  }
+});
+
+// ---------- sheets ----------
+function openSheet(id){ document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('open')); if(id) $(id).classList.add('open'); }
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>openSheet(null));
+$('openSettings').onclick = ()=>{ $('apiKey').value = apiKey; $('reader').value = reader; $('rate').value = rate; loadVoices(); openSheet('setSheet'); };
+$('saveKey').onclick = ()=>{ apiKey = $('apiKey').value.trim(); store.set('key', apiKey); toast(apiKey ? 'Key saved' : 'Key cleared'); };
+$('reader').onchange = e=>{ reader = e.target.value; store.set('reader', reader); };
+$('rate').onchange = e=>{ rate = e.target.value; store.set('rate', rate); };
+$('voice').onchange = e=>{ voiceName = e.target.value; store.set('voice', voiceName); };
+
+// books list
+$('books').innerHTML = BOOKS.map((b,i)=>
+  (i===0 ? '<div class="testament">Old Testament</div>' : i===NT_START ? '<div class="testament">New Testament</div>' : '') +
+  `<button class="book" data-b="${i}">${b[0]}<span>${b[1].length} ${b[1].length===1?'chapter':'chapters'}</span></button>`
+).join('');
+$('openAdd').onclick = ()=>{
+  if (!apiKey){ toast('First, add your ESV key in Settings'); $('openSettings').click(); return; }
+  openSheet('bookSheet');
+};
+let curBook = 0;
+$('books').addEventListener('click', e=>{
+  const b = e.target.closest('[data-b]'); if (!b) return;
+  curBook = +b.dataset.b;
+  $('pickTitle').textContent = BOOKS[curBook][0];
+  const n = BOOKS[curBook][1].length;
+  $('selChap').innerHTML = Array.from({length:n},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
+  fillVerses(); openSheet('pickSheet'); $('pickSheet').querySelector('.scroll').scrollTop = 0;
+});
+$('backToBooks').onclick = ()=>openSheet('bookSheet');
+function fillVerses(){
+  const n = BOOKS[curBook][1][$('selChap').value-1];
+  const opts = Array.from({length:n},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
+  $('selFrom').innerHTML = opts; $('selTo').innerHTML = opts;
+  preview();
+}
+$('selChap').onchange = fillVerses;
+$('selFrom').onchange = ()=>{ if (+$('selTo').value < +$('selFrom').value) $('selTo').value = $('selFrom').value; preview(); };
+$('selTo').onchange = ()=>{ if (+$('selTo').value < +$('selFrom').value) $('selFrom').value = $('selTo').value; preview(); };
+
+// ---------- ESV fetch ----------
+let pending = null, reqId = 0;
+function currentPick(){
+  const v = { book: BOOKS[curBook][0], chap: +$('selChap').value, from: +$('selFrom').value, to: +$('selTo').value };
+  v.ref = refText(v); return v;
+}
+async function fetchESV(v){
+  const q = `${v.book} ${v.chap}:${v.from}${v.to>v.from?'-'+v.to:''}`;
+  const params = new URLSearchParams({ q,
+    'include-passage-references':'false', 'include-verse-numbers':'false', 'include-first-verse-numbers':'false',
+    'include-footnotes':'false', 'include-footnote-body':'false', 'include-headings':'false',
+    'include-short-copyright':'false', 'include-selahs':'true', 'indent-paragraphs':'0', 'indent-poetry':'false',
+    'indent-declares':'0', 'indent-psalm-doxology':'0', 'line-length':'0' });
+  const r = await fetch('https://api.esv.org/v3/passage/text/?'+params, { headers:{ Authorization:'Token '+apiKey } });
+  if (r.status === 401 || r.status === 403) throw new Error('key');
+  if (!r.ok) throw new Error('http');
+  const j = await r.json();
+  const t = (j.passages||[]).join(' ').replace(/\s+/g,' ').trim();
+  if (!t) throw new Error('empty');
+  return t;
+}
+async function preview(){
+  const id = ++reqId, v = currentPick(), P = $('preview');
+  $('addIt').disabled = true; pending = null;
+  P.innerHTML = `<div class="ref">${esc(v.ref)}</div><div class="msg">Loading…</div>`;
+  try{
+    const t = await fetchESV(v);
+    if (id !== reqId) return;
+    pending = Object.assign(v, {text:t});
+    P.innerHTML = `<div class="ref">${esc(v.ref)}</div><div class="txt">${esc(t)}</div>`;
+    $('addIt').disabled = false;
+  }catch(e){
+    if (id !== reqId) return;
+    const m = e.message==='key' ? 'Your ESV key was not accepted. Check it in Settings.'
+            : e.message==='empty' ? 'No text came back for this passage.'
+            : 'Could not reach the ESV service. Check your internet connection and try again.';
+    P.innerHTML = `<div class="ref">${esc(v.ref)}</div><div class="err">${m}</div>`;
+  }
+}
+$('addIt').onclick = ()=>{
+  if (!pending) return;
+  const total = verses.reduce((s,v)=>s+(v.to-v.from+1),0) + (pending.to-pending.from+1);
+  if (total > 500){ toast('That would be over 500 saved verses, the ESV limit.'); return; }
+  if (verses.some(v=>v.ref===pending.ref)){ toast('Already in your list'); return; }
+  verses.push(pending); store.set('verses', verses);
+  selected = verses.length-1; store.set('selected', selected);
+  openSheet(null); render(); toast('Added ' + pending.ref);
+};
+
+render();
+</script>
+</body>
+</html>

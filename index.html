@@ -82,6 +82,14 @@
   .esvlink{display:inline-block; color:var(--accent); font:600 15px Inter,sans-serif; text-decoration:none; padding:6px 0 2px}
   textarea{width:100%; font:400 17px/1.5 "Source Serif 4",Georgia,serif; padding:12px; border:1.5px solid var(--line); border-radius:12px; background:var(--bg); color:var(--ink); resize:vertical}
   .sync{color:var(--muted); font-size:12px; margin:-4px 0 10px; min-height:14px}
+  .now{position:fixed; inset:0; z-index:5; background:var(--bg); display:none; flex-direction:column; justify-content:center;
+    padding:calc(30px + env(safe-area-inset-top)) 26px calc(120px + env(safe-area-inset-bottom))}
+  .now.open{display:flex}
+  .now .in{max-width:560px; margin:0 auto; width:100%; overflow-y:auto}
+  .now .bigref{font:600 34px/1.15 "Source Serif 4",Georgia,serif; color:var(--accent); margin:0 0 18px}
+  .now .bigtxt{font:400 23px/1.55 "Source Serif 4",Georgia,serif; color:var(--ink); margin:0}
+  .now .count{font:500 13px Inter,sans-serif; color:var(--muted); margin-top:22px}
+  .player{z-index:6}
   .toast{position:fixed; left:50%; bottom:110px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:20px; font-size:14px; z-index:20; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90%; text-align:center}
   .toast.show{opacity:1}
 </style>
@@ -158,7 +166,7 @@
       <option value="esv">ESV audio recording</option>
       <option value="tts">Phone voice</option>
     </select>
-    <p class="note" style="margin-top:8px">The reference is always read by the phone voice. If the ESV recording can't load, the phone voice reads the verses instead.</p>
+    <p class="note" style="margin-top:8px">With the ESV recording, the reference is shown on screen while the narrator reads. With the phone voice, the reference is read aloud first. If the ESV recording can't load, the phone voice reads the verses instead.</p>
     <p class="note" style="margin-top:8px">For a nicer phone voice on iPhone: Settings → Accessibility → Spoken Content → Voices → English, download a voice marked “Premium” or “Enhanced,” then pick it below.</p>
     <label class="f" for="rate">Phone voice speed</label>
     <select id="rate">
@@ -171,6 +179,12 @@
     <p class="note" style="margin-top:16px">Tip: keep this app open while it plays. Phones usually stop the reading voice when the screen locks, so the app tries to keep your screen on.</p>
   </div></div>
 </div>
+
+<div class="now" id="now"><div class="in">
+  <p class="bigref" id="nowRef"></p>
+  <p class="bigtxt" id="nowTxt"></p>
+  <p class="count" id="nowCount"></p>
+</div></div>
 
 <div class="toast" id="toast"></div>
 <audio id="esvAudio" preload="auto" playsinline></audio>
@@ -225,7 +239,15 @@ function render(){
       </div>`).join('');
   }
   $('play').disabled = !verses.length;
+  const v = playing && verses[nowIdx];
+  $('now').classList.toggle('open', !!v);
+  if (v){
+    $('nowRef').textContent = v.ref;
+    $('nowTxt').textContent = v.text;
+    $('nowCount').textContent = mode==='all' ? `Verse ${nowIdx+1} of ${verses.length}` : `Reading #${reps}`;
+  }
 }
+let reps = 0;
 $('list').addEventListener('click', e=>{
   const d = e.target.closest('[data-del]');
   if (d){
@@ -330,13 +352,12 @@ function playRecording(v, onDone, onFail){
   const p = audioEl.play(); if (p) p.catch(fail);
 }
 function speakVerse(i, onDone){
-  nowIdx = i; render();
+  nowIdx = i; reps++; render();
   const v = verses[i];
   if (reader === 'esv'){
-    preloadRecording(v);   // starts loading while the reference is spoken
-    say(spokenRef(v), ()=>{
-      timer = setTimeout(()=>{ if (playing) playRecording(v, onDone, ()=>ttsVerse(v, onDone)); }, 300);
-    });
+    // The narrator reads the verses; the reference is shown on screen, not spoken.
+    preloadRecording(v);
+    timer = setTimeout(()=>{ if (playing) playRecording(v, onDone, ()=>ttsVerse(v, onDone)); }, 700);
     return;
   }
   const queue = [spokenRef(v), ...chunks(v.text)];
@@ -369,7 +390,7 @@ function start(){
   // speech and audio to begin as a direct response to a tap.
   if (!synth){ toast("This browser can't read aloud."); return; }
   if (!verses.length) return;
-  playing = true;
+  playing = true; reps = 0;
   nowIdx = mode==='one' ? selected : 0;
   if (synth.speaking || synth.pending) synth.cancel();
   if (reader === 'esv') unlockAudio(verses[nowIdx]);

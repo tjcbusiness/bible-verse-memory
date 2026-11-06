@@ -276,15 +276,24 @@ function say(text, onDone){
   u.rate = parseFloat(rate);
   const v = voices.find(x=>x.name===voiceName);
   if (v){ u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
-  u.onend = ()=>{ if (playing) onDone(); };
-  u.onerror = (e)=>{ if (playing && e.error!=='interrupted' && e.error!=='canceled') onDone(); };
+  let started = false;
+  u.onstart = ()=>{ started = true; };
+  u.onend = ()=>{ started = true; if (playing) onDone(); };
+  u.onerror = (e)=>{
+    started = true;
+    if (!playing || e.error==='interrupted' || e.error==='canceled') return;
+    if (e.error==='not-allowed'){ toast('Your phone blocked the voice. Tap Stop, then Play again.'); return; }
+    onDone();
+  };
   synth.speak(u);
+  setTimeout(()=>{ if (playing && !started && !synth.speaking)
+    toast("No sound? Check that your iPhone isn't on silent and the volume is up."); }, 4000);
 }
 // ---------- ESV recordings ----------
 const audioEl = document.getElementById('esvAudio');
 const audioCache = {};   // ref -> blob URL (kept for this visit only)
 let audioWarned = false;
-const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+const SILENT = 'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
 function unlockAudio(){ try{ audioEl.src = SILENT; const p = audioEl.play(); if (p) p.catch(()=>{}); }catch(e){} }
 function getAudio(v){
   if (audioCache[v.ref]) return audioCache[v.ref];
@@ -344,18 +353,20 @@ function loop(){
     timer = setTimeout(loop, 2000); // pause between readings
   });
 }
-async function start(){
+function start(){
+  // Everything here runs right away inside the tap, because iPhones only allow
+  // speech and audio to begin as a direct response to a tap.
   if (!synth){ toast("This browser can't read aloud."); return; }
   if (!verses.length) return;
   playing = true;
   nowIdx = mode==='one' ? selected : 0;
-  synth.cancel();
+  if (synth.speaking || synth.pending) synth.cancel();
   if (reader === 'esv') unlockAudio();
   setPlayUI();
+  loop();   // first words are spoken inside this tap
   // Chrome on Android can stall the voice silently; nudge it.
   keepAlive = setInterval(()=>{ if (synth.speaking && !synth.paused){ synth.pause(); synth.resume(); } }, 10000);
-  try{ if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
-  loop();
+  if ('wakeLock' in navigator) navigator.wakeLock.request('screen').then(l=>{ wakeLock = l; }).catch(()=>{});
 }
 function stop(){
   playing = false; nowIdx = -1;

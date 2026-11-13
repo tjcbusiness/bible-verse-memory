@@ -315,17 +315,6 @@ function say(text, onDone){
 // ---------- ESV recordings ----------
 const audioEl = document.getElementById('esvAudio');
 let audioWarned = false;
-let unlocking = false;
-function unlockAudio(v){
-  // iPhone only lets audio play later if play() is first called during a tap.
-  // Start the first recording muted inside the tap, then pause it until it's needed.
-  try{
-    preloadRecording(v); audioEl.muted = true; unlocking = true;
-    const p = audioEl.play();
-    const done = ()=>{ if (unlocking){ unlocking = false; audioEl.pause(); try{ audioEl.currentTime = 0; }catch(e){} } audioEl.muted = false; };
-    if (p) p.then(done, done); else done();
-  }catch(e){ unlocking = false; audioEl.muted = false; }
-}
 // Crossway's recordings live at audio.esv.org/hw/<start>-<end>.mp3, where each id is
 // book (2 digits) + chapter (3) + verse (3), e.g. Romans 8:38 = 45008038.
 // Playing that address directly in an <audio> element works on phones, unlike downloading it.
@@ -339,25 +328,40 @@ function preloadRecording(v){
   const url = recordingUrl(v);
   if (loadedUrl !== url){ audioEl.onended = audioEl.onerror = null; audioEl.src = url; audioEl.load(); loadedUrl = url; }
 }
+let doneWatch = null;
 function playRecording(v, onDone, onFail){
   preloadRecording(v);
-  unlocking = false; audioEl.muted = false;
-  let failed = false;
-  const fail = ()=>{ if (failed || !playing) return; failed = true; loadedUrl = null;
+  audioEl.muted = false;
+  let finished = false;
+  clearInterval(doneWatch);
+  const finish = ()=>{ if (finished) return; finished = true; clearInterval(doneWatch); if (playing) onDone(); };
+  const fail = (e)=>{
+    if (finished || !playing) return; finished = true; clearInterval(doneWatch);
+    if (e && e.name === 'NotAllowedError'){
+      // The phone refused to start audio without a tap.
+      toast('Your phone paused the audio. Tap Play to keep going.'); stop(); return;
+    }
+    loadedUrl = null;
     if (!audioWarned){ audioWarned = true; toast("ESV recording didn't load, so the phone voice is reading"); }
-    onFail(); };
-  audioEl.onended = ()=>{ if (playing) onDone(); };
-  audioEl.onerror = fail;
+    onFail();
+  };
+  audioEl.onended = finish;
+  audioEl.onerror = ()=>fail();
+  // Some phones don't always send the "ended" signal, so also watch the position.
+  doneWatch = setInterval(()=>{
+    const d = audioEl.duration;
+    if (audioEl.ended || (d && isFinite(d) && audioEl.currentTime >= d - 0.15 && audioEl.paused)) finish();
+  }, 500);
   try{ audioEl.currentTime = 0; }catch(e){}
   const p = audioEl.play(); if (p) p.catch(fail);
 }
-function speakVerse(i, onDone){
+function speakVerse(i, onDone, now){
   nowIdx = i; reps++; render();
   const v = verses[i];
   if (reader === 'esv'){
     // The narrator reads the verses; the reference is shown on screen, not spoken.
-    preloadRecording(v);
-    timer = setTimeout(()=>{ if (playing) playRecording(v, onDone, ()=>ttsVerse(v, onDone)); }, 700);
+    if (now) playRecording(v, onDone, ()=>ttsVerse(v, onDone));   // first reading: start inside the tap
+    else { preloadRecording(v); timer = setTimeout(()=>{ if (playing) playRecording(v, onDone, ()=>ttsVerse(v, onDone)); }, 300); }
     return;
   }
   const queue = [spokenRef(v), ...chunks(v.text)];
@@ -376,14 +380,14 @@ function ttsVerse(v, onDone){
   const next = ()=>{ if (!playing) return; if (k >= queue.length){ onDone(); return; } say(queue[k++], next); };
   next();
 }
-function loop(){
+function loop(now){
   if (!playing) return;
   const i = mode==='one' ? selected : nowIdx;
   speakVerse(i, ()=>{
     if (!playing) return;
     if (mode==='all') nowIdx = (nowIdx+1) % verses.length;
     timer = setTimeout(loop, 2000); // pause between readings
-  });
+  }, now);
 }
 function start(){
   // Everything here runs right away inside the tap, because iPhones only allow
@@ -393,9 +397,8 @@ function start(){
   playing = true; reps = 0;
   nowIdx = mode==='one' ? selected : 0;
   if (synth.speaking || synth.pending) synth.cancel();
-  if (reader === 'esv') unlockAudio(verses[nowIdx]);
   setPlayUI();
-  loop();   // first words are spoken inside this tap
+  loop(true);   // first reading starts inside this tap
   // Chrome on Android can stall the voice silently; nudge it.
   keepAlive = setInterval(()=>{ if (synth.speaking && !synth.paused){ synth.pause(); synth.resume(); } }, 10000);
   if ('wakeLock' in navigator) navigator.wakeLock.request('screen').then(l=>{ wakeLock = l; }).catch(()=>{});
@@ -404,6 +407,7 @@ function stop(){
   playing = false; nowIdx = -1;
   clearTimeout(timer); clearInterval(keepAlive);
   if (synth) synth.cancel();
+  clearInterval(doneWatch);
   try{ audioEl.pause(); audioEl.onended = audioEl.onerror = null; }catch(e){}
   try{ wakeLock && wakeLock.release(); }catch(e){} wakeLock = null;
   setPlayUI(); render();

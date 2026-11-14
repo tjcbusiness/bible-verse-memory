@@ -92,6 +92,16 @@
   .now .bigtxt{font:400 21px/1.55 "Source Serif 4",Georgia,serif; color:var(--ink); margin:0}
   .now .count{font:500 13px Inter,sans-serif; color:var(--muted); margin-top:22px; text-align:center}
   .player{z-index:6}
+  .refview{flex:1; display:flex; align-items:center; justify-content:center; min-height:0}
+  .hugeref{text-align:center; color:var(--accent); font-family:"Source Serif 4",Georgia,serif; font-weight:600; line-height:1.02; letter-spacing:-.015em}
+  .hugeref span{display:table; margin:0 auto; white-space:nowrap}
+  .now.textmode .refview{display:none}
+  .now:not(.textmode) #textView{display:none}
+  .viewbtn{position:fixed; right:18px; bottom:calc(98px + env(safe-area-inset-bottom)); z-index:7;
+    background:var(--card); color:var(--ink); border:1.5px solid var(--line); border-radius:12px;
+    padding:9px 14px; font:600 14px Inter,sans-serif; display:flex; align-items:center; gap:6px; cursor:pointer;
+    box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .viewbtn svg{width:16px; height:16px}
   .toast{position:fixed; left:50%; bottom:110px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:20px; font-size:14px; z-index:20; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90%; text-align:center}
   .toast.show{opacity:1}
 </style>
@@ -182,11 +192,15 @@
   </div></div>
 </div>
 
-<div class="now" id="now"><div class="in">
-  <p class="bigref" id="nowRef"></p>
-  <p class="bigtxt" id="nowTxt"></p>
-  <p class="count" id="nowCount"></p>
-</div></div>
+<div class="now" id="now">
+  <div class="refview" id="refView"><div class="hugeref" id="hugeRef"><span id="hugeL1"></span><span id="hugeL2"></span></div></div>
+  <div class="in" id="textView">
+    <p class="bigref" id="nowRef"></p>
+    <p class="bigtxt" id="nowTxt"></p>
+    <p class="count" id="nowCount"></p>
+  </div>
+  <button class="viewbtn" id="viewBtn"></button>
+</div>
 
 <div class="toast" id="toast"></div>
 <audio id="esvAudio" preload="auto" playsinline></audio>
@@ -250,8 +264,36 @@ function render(){
       `<span class="vv">${v.to>v.from ? v.from+' – '+v.to : v.from}</span>`;
     $('nowTxt').textContent = v.text;
     $('nowCount').textContent = mode==='all' ? `Verse ${nowIdx+1} of ${verses.length}` : `Reading #${reps}`;
+    $('hugeL1').textContent = oneChap ? bk : bk+' '+v.chap;
+    $('hugeL2').textContent = v.to>v.from ? v.from+'–'+v.to : String(v.from);
+    showView();
   }
 }
+// ---------- now-playing views: big reference, or the text ----------
+let nowView = 'ref';
+const ICON_TEXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';
+const ICON_REF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/></svg>';
+function showView(){
+  $('now').classList.toggle('textmode', nowView==='text');
+  $('viewBtn').innerHTML = nowView==='text' ? ICON_REF+'Reference' : ICON_TEXT+'Text';
+  if (nowView==='ref') requestAnimationFrame(fitRef);
+}
+function fitRef(){
+  // Make the reference as big as the screen allows. Each line is sized to the full width,
+  // then both shrink together if they would be taller than the screen.
+  const box = $('refView'), lines = [$('hugeL1'), $('hugeL2')];
+  const W = box.clientWidth - 8, H = box.clientHeight - 8;
+  if (W <= 0 || H <= 0) return;
+  const sizes = lines.map(l=>{
+    l.style.fontSize = '100px';
+    return Math.min(100 * W / l.scrollWidth, H * 0.6);
+  });
+  const total = (sizes[0] + sizes[1]) * 1.05;
+  const k = total > H ? H / total : 1;
+  lines.forEach((l,i)=>{ l.style.fontSize = Math.floor(sizes[i] * k) + 'px'; });
+}
+$('viewBtn').onclick = ()=>{ nowView = nowView==='ref' ? 'text' : 'ref'; showView(); };
+window.addEventListener('resize', ()=>{ if (playing && nowView==='ref') fitRef(); });
 let reps = 0;
 $('list').addEventListener('click', e=>{
   const d = e.target.closest('[data-del]');
@@ -399,7 +441,7 @@ function start(){
   // speech and audio to begin as a direct response to a tap.
   if (!synth){ toast("This browser can't read aloud."); return; }
   if (!verses.length) return;
-  playing = true; reps = 0;
+  playing = true; reps = 0; nowView = 'ref';
   nowIdx = mode==='one' ? selected : 0;
   if (synth.speaking || synth.pending) synth.cancel();
   setPlayUI();

@@ -279,18 +279,23 @@ function showView(){
   if (nowView==='ref') requestAnimationFrame(fitRef);
 }
 function fitRef(){
-  // Make the reference as big as the screen allows. Each line is sized to the full width,
-  // then both shrink together if they would be taller than the screen.
-  const box = $('refView'), lines = [$('hugeL1'), $('hugeL2')];
+  // Size the reference so it looks the same from verse to verse:
+  // the verse numbers are sized as if they were a typical range ("88–88"), so a single
+  // verse isn't blown up, and the book line stays a bit smaller than the numbers.
+  const box = $('refView'), L1 = $('hugeL1'), L2 = $('hugeL2');
   const W = box.clientWidth - 8, H = box.clientHeight - 8;
   if (W <= 0 || H <= 0) return;
-  const sizes = lines.map(l=>{
-    l.style.fontSize = '100px';
-    return Math.min(100 * W / l.scrollWidth, H * 0.6);
-  });
-  const total = (sizes[0] + sizes[1]) * 1.05;
-  const k = total > H ? H / total : 1;
-  lines.forEach((l,i)=>{ l.style.fontSize = Math.floor(sizes[i] * k) + 'px'; });
+  const fit = (el, text)=>{
+    const keep = el.textContent; if (text) el.textContent = text;
+    el.style.fontSize = '100px'; const s = 100 * W / el.scrollWidth;
+    if (text) el.textContent = keep; return s;
+  };
+  let s2 = Math.min(fit(L2, '88–88'), fit(L2));
+  let s1 = Math.min(fit(L1), s2 * 0.72);
+  const total = (s1 + s2) * 1.05;
+  if (total > H){ const k = H / total; s1 *= k; s2 *= k; }
+  L1.style.fontSize = Math.floor(s1) + 'px';
+  L2.style.fontSize = Math.floor(s2) + 'px';
 }
 $('viewBtn').onclick = ()=>{ nowView = nowView==='ref' ? 'text' : 'ref'; showView(); };
 window.addEventListener('resize', ()=>{ if (playing && nowView==='ref') fitRef(); });
